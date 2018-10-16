@@ -231,6 +231,7 @@ public class DatasetPage implements java.io.Serializable {
     private String version;
     private String protocol = "";
     private String authority = "";
+    private String providedDOI = "";
     private String customFields="";
 
     private boolean noDVsAtAll = false;
@@ -1024,6 +1025,23 @@ public class DatasetPage implements java.io.Serializable {
 
     public void setDataset(Dataset dataset) {
         this.dataset = dataset;
+    }
+
+    public void setProvidedDOI(String providedDOI) {
+        this.providedDOI = providedDOI;
+        if (providedDOI != null && providedDOI != "") {
+            String[] doiparts = providedDOI.split("/",2);
+            if (doiparts.length == 2) {
+                dataset.setProtocol("doi");
+                dataset.setAuthority(doiparts[0]);
+                dataset.setIdentifier(doiparts[1]);
+                dataset.setGlobalIdCreateTime(new Timestamp(new Date().getTime()));
+            }
+        } 
+    }
+
+    public String getProvidedDOI() {
+        return this.providedDOI;
     }
 
     public DatasetVersion getWorkingVersion() {
