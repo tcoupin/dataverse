@@ -107,7 +107,8 @@ public class DatasetFieldValue implements Serializable {
             String displayValue = format
                     .replace("#NAME",  this.datasetField.getDatasetFieldType().getTitle() == null ? "" : this.datasetField.getDatasetFieldType().getTitle())
                     .replace("#EMAIL", ResourceBundle.getBundle("Bundle").getString("dataset.email.hiddenMessage"))
-                    .replace("#VALUE", sanitizedValue);
+                    .replace("#RAW", "")
+                    .replace("#VALUE", sanitizedValue);     
             retVal = displayValue;
         }
 

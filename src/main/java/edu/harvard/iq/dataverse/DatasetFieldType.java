@@ -177,7 +177,7 @@ public class DatasetFieldType implements Serializable, Comparable<DatasetFieldTy
         if (this.fieldType.equals(FieldType.TEXTBOX)){
             return false;
         }
-        return !(this.fieldType.equals(FieldType.TEXT) &&  this.displayFormat != null &&this.displayFormat.contains("<a"));
+        return !(this.fieldType.equals(FieldType.TEXT) &&  this.displayFormat != null && (this.displayFormat.contains("<a") || this.displayFormat.contains("#RAW")));
     }
     
     public String getName() {
