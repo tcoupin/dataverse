@@ -154,6 +154,7 @@ public class DatasetFieldCompoundValue implements Serializable {
                         //todo: this should be handled in more generic way for any other text that can then be internationalized
                         // if we need to use replaceAll for regexp, then make sure to use: java.util.regex.Matcher.quoteReplacement(<target string>)
                         .replace("#EMAIL", ResourceBundle.getBundle("Bundle").getString("dataset.email.hiddenMessage"))
+                        .replace("#RAW", "")
                         .replace("#VALUE",  sanitizedValue );
 
                 fieldMap.put(childDatasetField,displayValue);
