@@ -44,3 +44,9 @@ conf/docker-aio/dv/install/dvinstall.zip
 conf/docker-aio/testdata/
 scripts/installer/default.config
 *.pem
+
+# IDE generated files
+.classpath
+.factorypath
+.project
+org.eclipse*
