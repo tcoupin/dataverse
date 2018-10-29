@@ -53,7 +53,7 @@
                     <f:viewAction action="#{dataverseHeaderFragment.initBreadcrumbs(DatasetPage.dataset)}"/>
                     <f:viewAction action="#{EditDatafilesPage.initCreateMode(DatasetPage.editMode, DatasetPage.workingVersion, DatasetPage.newFiles, DatasetPage.selectedFiles)}"/>
                 </f:metadata>
-                <script type="text/javascript" src="/resources/js/map.js"/>
+                <script type="text/javascript" src="#{resource['js/map.js']}?version=#{systemConfig.getVersion()}"></script>
                 <h:form id="datasetForm">
                     <!-- Header / Button Panel -->
                     <!-- View editMode -->
