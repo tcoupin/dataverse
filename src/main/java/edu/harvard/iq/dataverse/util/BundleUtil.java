@@ -25,6 +25,7 @@ public class BundleUtil {
         DataverseLocaleBean d = new DataverseLocaleBean();
         ResourceBundle bundle;
         bundle_locale = new Locale(d.getLocaleCode());
+        logger.fine("locale: " + d.getLocaleCode());
 
         String filesRootDirectory = System.getProperty("dataverse.lang.directory");
 
@@ -52,7 +53,7 @@ public class BundleUtil {
         String stringFromBundle = null;
         try {
             stringFromBundle = bundle.getString(key);
-            logger.fine("string found: " + stringFromBundle);
+            logger.fine("string found: [" + key + "]:" + stringFromBundle);
         } catch (MissingResourceException ex) {
             logger.warning("Could not find key \"" + key + "\" in bundle file.");
             return null;
