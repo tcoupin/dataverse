@@ -436,6 +436,7 @@
 
                     <!-- Create/Edit editMode -->
                     <ui:fragment rendered="#{DatasetPage.editMode == 'METADATA' or DatasetPage.editMode == 'CREATE'}">
+                        <script type="text/javascript" src="#{resource['js/horizon.js']}?version=#{systemConfig.getVersion()}"></script>
                         <div class="form-group">
                             <label for="select_HostDataverse" class="col-sm-2 control-label">
                                 <span data-toggle="tooltip" data-placement="auto right" class="tooltiplabel text-info" data-original-title="#{bundle['dataverse.host.title']}">
