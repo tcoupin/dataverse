@@ -53,7 +53,7 @@
                     <f:viewAction action="#{dataverseHeaderFragment.initBreadcrumbs(DatasetPage.dataset)}"/>
                     <f:viewAction action="#{EditDatafilesPage.initCreateMode(DatasetPage.editMode, DatasetPage.workingVersion, DatasetPage.newFiles, DatasetPage.selectedFiles)}"/>
                 </f:metadata>
-                <script type="text/javascript" src="/resources/js/map.js"/>
+                <script type="text/javascript" src="#{resource['js/map.js']}?version=#{systemConfig.getVersion()}"></script>
                 <h:form id="datasetForm">
                     <!-- Header / Button Panel -->
                     <!-- View editMode -->
@@ -436,6 +436,7 @@
 
                     <!-- Create/Edit editMode -->
                     <ui:fragment rendered="#{DatasetPage.editMode == 'METADATA' or DatasetPage.editMode == 'CREATE'}">
+                        <script type="text/javascript" src="#{resource['js/horizon.js']}?version=#{systemConfig.getVersion()}"></script>
                         <div class="form-group">
                             <label for="select_HostDataverse" class="col-sm-2 control-label">
                                 <span data-toggle="tooltip" data-placement="auto right" class="tooltiplabel text-info" data-original-title="#{bundle['dataverse.host.title']}">
