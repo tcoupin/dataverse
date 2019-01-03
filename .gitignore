@@ -50,3 +50,6 @@ scripts/installer/default.config
 .factorypath
 .project
 org.eclipse*
+# do not track IntelliJ IDEA files
+.idea
+**/*.iml
