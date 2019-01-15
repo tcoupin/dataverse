@@ -3,7 +3,7 @@
  * Author: Thibault COUPIN <thibault.coupin@ird.fr>
  */
 
- HORIZON_URL="https://cors-anywhere.herokuapp.com/http://www.documentation.ird.fr/hor/"
+ HORIZON_URL="http://www.documentation.ird.fr/hor/"
  DC_SUFFIX=".dc"
 
  $("form#datasetForm").on('change', function(e){
