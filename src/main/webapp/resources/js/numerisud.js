@@ -8,7 +8,7 @@ label[for='metadata_topicClassVocabURI']+div { position: absolute;left: -10000px
 
 
 
-NUMERISUD_NAME="Numérisud"
+NUMERISUD_NAME="NumeriSud"
 
 $("form#datasetForm").on('change', function(e){
     $('div:has(>label[for="metadata_topicClassValue"])').each(function(){
