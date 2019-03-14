@@ -18,6 +18,6 @@ Que devrait-il se passer ?
 
 Ajouter ici toute information complémentaire détaillant le contexte et/ou des captures d'écrans.
 
-/label ~type/bug
+/label ~"type/bug"
 /cc @banon
 /assign @coupin
