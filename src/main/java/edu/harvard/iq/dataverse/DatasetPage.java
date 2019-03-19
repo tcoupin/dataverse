@@ -1,5 +1,6 @@
 package edu.harvard.iq.dataverse;
 
+import edu.harvard.iq.dataverse.GlobalId;
 import edu.harvard.iq.dataverse.provenance.ProvPopupFragmentBean;
 import edu.harvard.iq.dataverse.PackagePopupFragmentBean;
 import edu.harvard.iq.dataverse.api.AbstractApiBean;
@@ -1032,18 +1033,73 @@ public class DatasetPage implements java.io.Serializable {
     public void setProvidedDOI(String providedDOI) {
         this.providedDOI = providedDOI;
         if (providedDOI != null && providedDOI != "") {
-            String[] doiparts = providedDOI.split("/",2);
-            if (doiparts.length == 2) {
-                dataset.setProtocol("doi");
-                dataset.setAuthority(doiparts[0]);
-                dataset.setIdentifier(doiparts[1]);
-                dataset.setGlobalIdCreateTime(new Timestamp(new Date().getTime()));
+            /**
+             *  Supported format :
+             *   - 10.XXX/YYY
+             *   - doi:10.XXX/YYY
+             *   - http://doi.org/10.XXX/YYY
+             *   - https://doi.org/10.XXX/YYY
+             */
+
+            //// From ImportGenericServiceBean.java l.395 
+            int index1 = providedDOI.indexOf(':');
+            int index2 = providedDOI.indexOf('/');
+            if (index1==-1) {
+                providedDOI = GlobalId.DOI_PROTOCOL + ":" + providedDOI;
+                index1 = providedDOI.indexOf(':');
+                index2 = providedDOI.indexOf('/');
+            }  
+       
+            String protocol = providedDOI.substring(0, index1);
+        
+            if (GlobalId.DOI_PROTOCOL.equals(protocol)) {
+                logger.fine("Processing doi:-style identifier : "+providedDOI);        
+
+            } else if ("http".equalsIgnoreCase(protocol) || "https".equalsIgnoreCase(protocol)) {
+            
+                // We also recognize global identifiers formatted as global resolver URLs:
+            
+                if (providedDOI.startsWith(GlobalId.DOI_RESOLVER_URL)) {
+                    logger.fine("Processing DOI identifier formatted as a resolver URL: "+providedDOI);
+                    protocol = GlobalId.DOI_PROTOCOL;
+                    index1 = GlobalId.DOI_RESOLVER_URL.length() - 1; 
+                    index2 = providedDOI.indexOf("/", index1 + 1);
+                } else {
+                    logger.warning("HTTP Url in supplied as the identifier is neither a Handle nor DOI resolver: "+providedDOI);
+                    return;
+                }
+            
+            } else {
+                logger.warning("Unknown identifier format: "+providedDOI);
+                return; 
             }
+        
+            if (index2 == -1) {
+                logger.warning("Error parsing identifier: " + providedDOI + ". Second '/' not found in string");
+                return;
+            }
+
+            String authority = providedDOI.substring(index1 + 1, index2);
+            String identifier = providedDOI.substring(index2 + 1);
+
+            dataset.setProtocol(GlobalId.DOI_PROTOCOL);
+            dataset.setAuthority(authority);
+            dataset.setIdentifier(identifier);
+            dataset.setGlobalIdCreateTime(new Timestamp(new Date().getTime()));
         } 
     }
 
     public String getProvidedDOI() {
         return this.providedDOI;
+    }
+
+    public boolean validateProvidedDOI() {
+        if (providedDOI != null && providedDOI != "") {
+            return GlobalId.DOI_PROTOCOL.equals(dataset.getProtocol()) && 
+                dataset.getAuthority() != null && dataset.getAuthority() != "" && 
+                dataset.getIdentifier() != null && dataset.getIdentifier() != "";
+        }
+        return true;
     }
 
     public DatasetVersion getWorkingVersion() {
@@ -2582,6 +2638,12 @@ public class DatasetPage implements java.io.Serializable {
         }
         
         // Validate
+        // -- Validate provided DOI
+        if (!this.validateProvidedDOI()){
+            JH.addMessage(FacesMessage.SEVERITY_ERROR, BundleUtil.getStringFromBundle("dataset.message.DOIValidationError"));
+            return "";
+        }
+        // -- END Validate provided DOI
         Set<ConstraintViolation> constraintViolations = workingVersion.validate();
         if (!constraintViolations.isEmpty()) {
              //JsfHelper.addFlashMessage(BundleUtil.getStringFromBundle("dataset.message.validationError"));
