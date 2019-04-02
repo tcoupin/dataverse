@@ -16,89 +16,236 @@
 			bottom: 0;
 
 		}
-		#helper {
-			font-size: 2em;
-			position: absolute;
-			bottom: 0;
-			width: 100%;
-			z-index: 5000;
+
+		.leaflet-control a.disable {
+			color: lightgray;
 		}
+		.leaflet-control a.active {
+			color: lightgray;
+			background-color: rgb(30,30,30);
+		}
+
+		.control-help {
+			display: flex;
+			background-color: white;
+		}
+		.control-help-link {
+			border: solid rgb(204,204,204) 1px;
+			border-radius: 2px;
+		}
+
+		.control-help-content {
+			-webkit-transition: all 0.8s ease-in-out 0s;
+			transition: all 0.8s ease-in-out 0s;
+			width: 0px;
+			height: 0px;
+			overflow: hidden;
+		}
+		.control-help-content.show {
+			width: calc( 8cm + 1em );
+			height: calc( 5cm + 1em );
+			
+		}
+
+		.control-help-body {
+			padding: 0.5em;
+			overflow-y: scroll;
+			width: 8cm;
+			height: 5cm;
+		}
+
 	</style>
 </head>
 <body>
 	<div id="map"></div>
-	<div id="helper">
-		Press Ctrl to draw the bounding box, click on it to validate.
-	</div>
+	
 	<script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js"></script>
 	<script type="text/javascript">
+		/**
+		 * Custom controls
+		 */
+		L.Control.Help = L.Control.extend(
+			{
+				options: {
+					position: 'topleft',
+					text: 'mon texte',
+					visible: false,
+					timesmark: "<b>&times</b>",
+					quesitonmark: "<b>&#10068;</b>"
+				},
+				onAdd: function(map){
+					this._div = L.DomUtil.create('div', 'leaflet-bar control-help');
+					this._link = L.DomUtil.create('a', 'control-help-link', this._div);
+					this._link.href = '#';
+					this._link.title = "Aide/Help";
+					this._link.innerHTML = this.options.quesitonmark
+					this._text = L.DomUtil.create('div', 'control-help-content', this._div);
+					this._text_body = L.DomUtil.create('div', 'control-help-body', this._text);
+					this._text_body.innerHTML = this.options.text;
+
+					L.DomEvent.disableClickPropagation(this._link)
+					L.DomEvent.addListener(this._link, 'click', this._onClick, this);
+					L.DomEvent.disableClickPropagation(this._text)
+					L.DomEvent.disableScrollPropagation(this._text)
+
+
+					return this._div;
+				},
+				_onClick: function(){
+					this.visible = !this.visible;
+					if (this.visible){
+						L.DomUtil.addClass(this._text,'show');
+						this._link.innerHTML = this.options.timesmark
+					} else {
+						L.DomUtil.removeClass(this._text,'show');
+						this._link.innerHTML = this.options.quesitonmark;
+					}
+				}
+			}
+		);
+		L.control.help = function (options) {return new L.Control.Help(options);};
+
+		L.Control.Draw = L.Control.extend(
+			{
+				options: {
+					position: 'topleft',
+					layerOpts: {
+     	 			  	color: '#FF6666',
+        				weight: 5,
+        				opacity: 0.8,
+					}
+				},
+				onAdd: function(map){
+					this.map = map;
+					this._div = L.DomUtil.create('div', 'leaflet-bar control-draw');
+					
+					this._link_draw = L.DomUtil.create('a', 'control-draw-link', this._div);
+					this._link_draw.href = '#';
+					this._link_draw.title = "Dessiner/Draw";
+					this._link_draw.innerHTML = "<b>&#128393;</b>";
+
+					this._link_validate = L.DomUtil.create('a', 'control-validate-link', this._div);
+					this._link_validate.href = '#';
+					this._link_validate.title = "Valider/Validate";
+					this._link_validate.innerHTML = "<b>&#10003;</b>";
+
+					L.DomEvent.disableClickPropagation(this._link_validate)
+					L.DomEvent.addListener(this._link_validate, 'click', this._onValidate, this);
+					L.DomEvent.disableClickPropagation(this._link_draw)
+					L.DomEvent.addListener(this._link_draw, 'click', this._clickDraw, this);
+
+					this._init(map)
+
+					return this._div;
+				},
+				_init: function(map){
+					// Parse bbox in GET params
+					var url = new URL(window.location.href);
+            		if (url.searchParams.get('bbox') != null){
+            		    bbox = url.searchParams.get('bbox').split(';')
+            		    if (bbox.length == 4){
+            		        this._bboxLayer = L.rectangle([[bbox[0],bbox[1]],[bbox[2],bbox[3]]],this.options.layerOpts).addTo(map)
+            		        map.fitBounds(this._bboxLayer.getBounds(),{maxZoom:3})
+            		    }
+            		}
+				},
+				_clickDraw: function(){
+					if (this.drawing){
+						this._stopDraw()
+					} else {
+						this._startDraw()
+					}
+				},
+				_startDraw: function(){
+					this.drawing = true;
+					this.map.dragging.disable();
+					this._points = []
+					this.map.on('mousedown',this._onMouseDown, this);
+					this.map.on('mousemove',this._onMouseMove, this);
+					this.map.on('mouseup mouseout',this._onMouseUp, this);
+					L.DomUtil.addClass(this._link_draw,'active');
+					L.DomUtil.addClass(this._link_validate,'disable');
+				},
+				_stopDraw: function(){
+					this.drawing = false;
+					this.map.dragging.enable()
+					this.map.off('mousedown',this._onMouseDown, this);
+					this.map.off('mousemove',this._onMouseMove, this);
+					this.map.off('mouseup mouseout',this._onMouseUp, this);
+					L.DomUtil.removeClass(this._link_draw,'active');
+					L.DomUtil.removeClass(this._link_validate,'disable');
+				},
+				_onMouseDown: function(e){
+					this.mousedown = true
+					if (this.map.hasLayer(this._bboxLayer)){
+						this.map.removeLayer(this._bboxLayer)
+					}
+					this._points[0] = e.latlng;
+					this._points[1] = e.latlng;
+					this._bboxLayer = L.rectangle(L.latLngBounds(this._points),this.options.layerOpts).addTo(this.map)
+				},
+				_onMouseMove: function(e){
+					if (this.mousedown){
+						console.log("drawing")
+						L.DomEvent.stopPropagation(e.originalEvent);
+						this._points[1] = e.latlng;
+						this._bboxLayer.setBounds(L.latLngBounds(this._points))
+					}
+				},
+				_onMouseUp: function(e){
+					console.log("Stop drawing")
+					this.mousedown = false
+					L.DomEvent.stopPropagation(e.originalEvent);
+					this._points[1] = e.latlng;
+					this._bboxLayer.setBounds(L.latLngBounds(this._points))
+					this._stopDraw()
+				},
+				_onValidate: function(){
+					if (this._bboxLayer === undefined){
+						//window.close()
+						console.log("close")
+						return
+					}
+					var bbox = this._bboxLayer.getBounds()
+					bbox = {east: bbox.getEast(), west: bbox.getWest(), north: bbox.getNorth(), south: bbox.getSouth()}
+					console.log(bbox)
+					if (opener !== undefined && opener.DvMapPopupCallback !== undefined){
+						opener.DvMapPopupCallback(bbox)	
+						window.close()
+					}
+				}
+			}
+		);
+		L.control.draw = function (options) {return new L.Control.Draw(options);};
+		
+
+		/**
+		 * Map configuration
+		 */
 		var map;
-		var layerOpts = {
-     	   	color: '#FF6666',
-        	weight: 5,
-        	opacity: 0.8,
-		}
+		var help_text=`
+			<b>Dessiner facilement des emprises géographiques</b><br>
+			Activer l'outils de dessin avec le bouton <b>&#128393;</b> et cliquer et glisser sur la carte pour créer votre emprise.<br>
+			Utiliser le bouton <b>&#10003;</b> pour valider l'emprise.
+			<br>
+			<br>
+			<hr>
+			<b>Easily draw geographic box</b><br>
+			Activate the drawing tools with the button <b>&#128393;</b> and click and drag on the map to create your box.<br>
+			Use the button <b>&#10003;</b> to validate the box.
+			<br>
+			`
 		window.addEventListener('load',function(){
 			map = L.map("map").setView([0,0],1)
 			L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
     			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com">Carto.com</a>'
 			}).addTo(map);
-			
-			var bboxLayer;
-            var points=[];
-            
-            // Parse bbox in GET params
-            var url = new URL(window.location.href);
-            if (url.searchParams.get('bbox') != null){
-                bbox = url.searchParams.get('bbox').split(';')
-                if (bbox.length == 4){
-                    bboxLayer = L.rectangle([[bbox[0],bbox[1]],[bbox[2],bbox[3]]],layerOpts).addTo(map)
-                    map.fitBounds(bboxLayer.getBounds(),{maxZoom:3})
-                }
-            }
 
-            // Draw feature
-			var drawing = false;
-			map.on('mousedown', function(e){
-				if (e.originalEvent.ctrlKey == true){
-					console.log("Start drawing")
-					map.dragging.disable()
-					drawing = true
-					if (map.hasLayer(bboxLayer)){
-						map.removeLayer(bboxLayer)
-					}
-					points[0] = e.latlng;
-					points[1] = e.latlng;
-					bboxLayer = L.rectangle(L.latLngBounds(points),layerOpts).addTo(map)
-				}
-			})
-			map.on('mousemove', function(e){
-				if (drawing){
-					console.log("drawing")
-					L.DomEvent.stopPropagation(e.originalEvent);
-					points[1] = e.latlng;
-					bboxLayer.setBounds(L.latLngBounds(points))
-				}
-			})
-			map.on('mouseup mouseout', function(e){
-				if (drawing){
-					console.log("Stop drawing")
-					L.DomEvent.stopPropagation(e.originalEvent);
-					points[1] = e.latlng;
-					bboxLayer.setBounds(L.latLngBounds(points))
-					bboxLayer.on('click', function(){
-						var bbox = bboxLayer.getBounds()
-						bbox = {east: bbox.getEast(), west: bbox.getWest(), north: bbox.getNorth(), south: bbox.getSouth()}
-						console.log(bbox)
-						if (opener !== undefined && opener.DvMapPopupCallback !== undefined){
-							opener.DvMapPopupCallback(bbox)	
-							window.close()
-						}
-					})
-				}
-				map.dragging.enable()
-				drawing = false
-			})
+			L.control.draw().addTo(map);
+			L.control.help({text: help_text}).addTo(map);
+			
+
+    
 		})
 	</script>
 </body>
