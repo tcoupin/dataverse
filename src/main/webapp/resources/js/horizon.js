@@ -4,6 +4,7 @@
  */
 
  HORIZON_URL="/hor/"
+ HORIZON_URL_DISPLAY="http://www.documentation.ird.fr"+HORIZON_URL
  DC_SUFFIX=".dc"
 
  $("form#datasetForm").on('change', function(e){
@@ -39,7 +40,7 @@ var pendingHorizon;
 
             
             $(type).find('option').filter(function(){return $(this).text() == 'url'}).first().prop('selected',true)
-            $(url).val(HORIZON_URL+fdi)
+            $(url).val(HORIZON_URL_DISPLAY+fdi)
             $(citation).val(ids[0].textContent)
             
         }
