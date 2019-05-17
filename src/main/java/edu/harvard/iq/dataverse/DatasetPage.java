@@ -20,6 +20,7 @@ import edu.harvard.iq.dataverse.datavariable.VariableServiceBean;
 import edu.harvard.iq.dataverse.engine.command.Command;
 import edu.harvard.iq.dataverse.engine.command.exception.CommandException;
 import edu.harvard.iq.dataverse.engine.command.impl.CreatePrivateUrlCommand;
+import edu.harvard.iq.dataverse.engine.command.impl.CuratePublishedDatasetVersionCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.DeaccessionDatasetVersionCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.DeleteDatasetVersionCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.DeletePrivateUrlCommand;
@@ -41,6 +42,7 @@ import edu.harvard.iq.dataverse.privateurl.PrivateUrlUtil;
 import edu.harvard.iq.dataverse.search.SearchFilesServiceBean;
 import edu.harvard.iq.dataverse.search.SortBy;
 import edu.harvard.iq.dataverse.settings.SettingsServiceBean;
+import edu.harvard.iq.dataverse.util.ArchiverUtil;
 import edu.harvard.iq.dataverse.util.BundleUtil;
 import edu.harvard.iq.dataverse.util.FileSortFieldAndOrder;
 import edu.harvard.iq.dataverse.util.FileUtil;
@@ -83,6 +85,7 @@ import javax.faces.model.SelectItem;
 import java.util.logging.Level;
 import edu.harvard.iq.dataverse.datasetutility.WorldMapPermissionHelper;
 import edu.harvard.iq.dataverse.engine.command.exception.IllegalCommandException;
+import edu.harvard.iq.dataverse.engine.command.impl.AbstractSubmitToArchiveCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.CreateNewDatasetCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.DeleteDataFileCommand;
 import edu.harvard.iq.dataverse.engine.command.impl.GetLatestPublishedDatasetVersionCommand;
@@ -94,7 +97,10 @@ import edu.harvard.iq.dataverse.engine.command.impl.SubmitDatasetForReviewComman
 import edu.harvard.iq.dataverse.externaltools.ExternalTool;
 import edu.harvard.iq.dataverse.externaltools.ExternalToolServiceBean;
 import edu.harvard.iq.dataverse.export.SchemaDotOrgExporter;
+import edu.harvard.iq.dataverse.makedatacount.MakeDataCountLoggingServiceBean;
+import edu.harvard.iq.dataverse.makedatacount.MakeDataCountLoggingServiceBean.MakeDataCountEntry;
 import java.util.Collections;
+import javax.faces.component.UIComponent;
 import javax.faces.component.UIInput;
 
 import javax.faces.event.AjaxBehaviorEvent;
@@ -108,6 +114,12 @@ import org.primefaces.component.tabview.TabView;
 import org.primefaces.event.CloseEvent;
 import org.primefaces.event.TabChangeEvent;
 import org.primefaces.event.data.PageEvent;
+
+import edu.harvard.iq.dataverse.makedatacount.MakeDataCountUtil;
+import java.util.TimeZone;
+import javax.servlet.http.HttpServletRequest;
+import org.primefaces.model.DefaultTreeNode;
+import org.primefaces.model.TreeNode;
 
 /**
  *
@@ -198,6 +210,8 @@ public class DatasetPage implements java.io.Serializable {
     SettingsWrapper settingsWrapper; 
     @Inject 
     ProvPopupFragmentBean provPopupFragmentBean;
+    @Inject
+    MakeDataCountLoggingServiceBean mdcLogService;
 
     private Dataset dataset = new Dataset();
     private EditMode editMode;
@@ -208,6 +222,7 @@ public class DatasetPage implements java.io.Serializable {
     private int selectedTabIndex;
     private List<DataFile> newFiles = new ArrayList<>();
     private DatasetVersion workingVersion;
+    private DatasetVersion clone;
     private int releaseRadio = 1;
     private int deaccessionRadio = 0;
     private int deaccessionReasonRadio = 0;
@@ -266,6 +281,16 @@ public class DatasetPage implements java.io.Serializable {
     private Boolean hasRsyncScript = false;
     
     private Boolean hasTabular = false;
+    
+    private boolean showIngestSuccess;
+
+    public boolean isShowIngestSuccess() {
+        return showIngestSuccess;
+    }
+
+    public void setShowIngestSuccess(boolean showIngestSuccess) {
+        this.showIngestSuccess = showIngestSuccess;
+    }
         
     List<ExternalTool> configureTools = new ArrayList<>();
     List<ExternalTool> exploreTools = new ArrayList<>();
@@ -749,8 +774,22 @@ public class DatasetPage implements java.io.Serializable {
         setReleasedVersionTabList(resetReleasedVersionTabList());
         
     }
+    
+    public void clickDeaccessionDataset(){
+        setReleasedVersionTabList(resetReleasedVersionTabList());
+        setRenderDeaccessionPopup(true);
+    }
+    
+    private boolean renderDeaccessionPopup = false;
 
+    public boolean isRenderDeaccessionPopup() {
+        return renderDeaccessionPopup;
+    }
 
+    public void setRenderDeaccessionPopup(boolean renderDeaccessionPopup) {
+        this.renderDeaccessionPopup = renderDeaccessionPopup;
+    }
+    
     public void updateSelectedLinkingDV(ValueChangeEvent event) {
         linkingDataverseId = (Long) event.getNewValue();
     }
@@ -1413,6 +1452,7 @@ public class DatasetPage implements java.io.Serializable {
     }     
     
     private String init(boolean initFull) {
+  
         //System.out.println("_YE_OLDE_QUERY_COUNTER_");  // for debug purposes
         this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSize();
         setDataverseSiteUrl(systemConfig.getDataverseSiteUrl());
@@ -1513,6 +1553,10 @@ public class DatasetPage implements java.io.Serializable {
             // init the citation
             displayCitation = dataset.getCitation(true, workingVersion);
             
+            if(workingVersion.isPublished()) {
+                MakeDataCountEntry entry = new MakeDataCountEntry(FacesContext.getCurrentInstance(), dvRequestService, workingVersion);
+                mdcLogService.logEntry(entry);
+            }
 
             if (initFull) {
                 // init the list of FileMetadatas
@@ -1530,7 +1574,7 @@ public class DatasetPage implements java.io.Serializable {
                 datasetNextMinorVersion = this.dataset.getNextMinorVersionString();
                 datasetVersionUI = datasetVersionUI.initDatasetVersionUI(workingVersion, false);
                 updateDatasetFieldInputLevels();
-                
+
                 setExistReleasedVersion(resetExistRealeaseVersion());
                 //moving setVersionTabList to tab change event
                 //setVersionTabList(resetVersionTabList());
@@ -1547,23 +1591,22 @@ public class DatasetPage implements java.io.Serializable {
                     try {
                         ScriptRequestResponse scriptRequestResponse = commandEngine.submit(new RequestRsyncScriptCommand(dvRequestService.getDataverseRequest(), dataset));
                         logger.fine("script: " + scriptRequestResponse.getScript());
-                        if(scriptRequestResponse.getScript()!=null && !scriptRequestResponse.getScript().isEmpty()){
+                        if (scriptRequestResponse.getScript() != null && !scriptRequestResponse.getScript().isEmpty()) {
                             setHasRsyncScript(true);
                             setRsyncScript(scriptRequestResponse.getScript());
-                            rsyncScriptFilename = "upload-"+ workingVersion.getDataset().getIdentifier() + ".bash";
+                            rsyncScriptFilename = "upload-" + workingVersion.getDataset().getIdentifier() + ".bash";
                             rsyncScriptFilename = rsyncScriptFilename.replace("/", "_");
-                        }
-                        else{
+                        } else {
                             setHasRsyncScript(false);
                         }
                     } catch (RuntimeException ex) {
                         logger.warning("Problem getting rsync script: " + ex.getLocalizedMessage());
                     } catch (CommandException cex) {
                         logger.warning("Problem getting rsync script (Command Exception): " + cex.getLocalizedMessage());
-                    }  
+                    }
                 }
-                   
-            }
+
+            }                       
         } else if (ownerId != null) {
             // create mode for a new child dataset
             readOnly = false; 
@@ -1652,17 +1695,174 @@ public class DatasetPage implements java.io.Serializable {
             }
         }
         
+            if (dataset.isLockedFor(DatasetLock.Reason.Ingest)) {
+                JH.addMessage(FacesMessage.SEVERITY_WARN, BundleUtil.getStringFromBundle("dataset.locked.message"),
+                        BundleUtil.getStringFromBundle("dataset.locked.ingest.message"));
+                lockedDueToIngestVar = true;
+            }
+            
         for(DataFile f : dataset.getFiles()) {
             if(f.isTabularData()) {
                 hasTabular = true;
                 break;
             }
         }
-
+        //Show ingest success message if refresh forces a page reload after ingest success
+        //This is needed to display the explore buttons (the fileDownloadHelper needs to be reloaded via page 
+        if (showIngestSuccess) {
+            JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("dataset.unlocked.ingest.message"));
+        }
+        
         configureTools = externalToolService.findByType(ExternalTool.Type.CONFIGURE);
         exploreTools = externalToolService.findByType(ExternalTool.Type.EXPLORE);
         rowsPerPage = 10;
+      
+        
+        
         return null;
+    }
+    
+    private Boolean fileTreeViewRequired = null; 
+    
+    public boolean isFileTreeViewRequired() {
+        if (fileTreeViewRequired == null) {
+            fileTreeViewRequired = workingVersion.getFileMetadatas().size() > 1 
+                    && datafileService.isFoldersMetadataPresentInVersion(workingVersion);
+        }
+        return fileTreeViewRequired; 
+    }
+    
+    public enum FileDisplayStyle {
+
+        TABLE, TREE
+    };
+    
+    private FileDisplayStyle fileDisplayMode = FileDisplayStyle.TABLE; 
+    
+    public String getFileDisplayMode() {
+        return fileDisplayMode.equals(FileDisplayStyle.TABLE) ? "Table" : "Tree";
+    }
+    
+    public void setFileDisplayMode(String fileDisplayMode) {
+        if ("Table".equals(fileDisplayMode)) {
+            this.fileDisplayMode = FileDisplayStyle.TABLE;
+        } else {
+            this.fileDisplayMode = FileDisplayStyle.TREE;
+        } 
+    }
+    
+    public boolean isFileDisplayTable() {
+        return fileDisplayMode == FileDisplayStyle.TABLE;
+    }
+    
+    public void toggleFileDisplayMode() {
+        if (fileDisplayMode == FileDisplayStyle.TABLE) {
+            fileDisplayMode = FileDisplayStyle.TREE;
+        } else {
+            fileDisplayMode = FileDisplayStyle.TABLE;
+        }
+    }
+    public boolean isFileDisplayTree() {
+        return fileDisplayMode == FileDisplayStyle.TREE;
+    }
+    
+    private TreeNode filesTreeRoot = null; 
+    
+    public TreeNode getFilesTreeRoot() {
+        if (filesTreeRoot == null) {
+            initFilesTree();
+        }
+        return filesTreeRoot;
+    }
+    
+    private void initFilesTree() {
+        filesTreeRoot = createFolderTreeNode("root", null);
+        TreeNode currentNode = filesTreeRoot;
+        // this is a temporary map, that we keep while we are building 
+        // the tree - in order to have direct access to the ancestor tree
+        // nodes that have already been created:
+        Map<String, TreeNode> folderMap = new HashMap<>();
+        boolean expandFolders = true; 
+        
+        for ( FileMetadata fileMetadata :workingVersion.getFileMetadatasSortedByLabelAndFolder()) {
+            String folder = fileMetadata.getDirectoryLabel();
+            
+            logger.fine("current folder: "+folder+"; current label: "+fileMetadata.getLabel());
+            
+            if (StringUtil.isEmpty(folder)) {
+                filesTreeRoot.getChildren().add(createFileTreeNode(fileMetadata, filesTreeRoot));
+            } else {
+                if (folderMap.containsKey(folder)) {
+                    // We have already created this node; and since all the FileMetadatas 
+                    // are sorted by folder-then-label, it is safe to assume this is 
+                    // still the "current node":
+                    currentNode.getChildren().add(createFileTreeNode(fileMetadata, currentNode));
+                } else {
+                    // no node for this folder yet - need to create!
+
+                    String[] subfolders = folder.split("/");
+                    int level = 0;
+                    currentNode = filesTreeRoot;
+
+                    while (level < subfolders.length) {
+                        String folderPath = subfolders[0];
+                        for (int i = 1; i < level + 1; i++) {
+                            folderPath = folderPath.concat("/").concat(subfolders[i]);
+                        }
+
+                        if (folderMap.containsKey(folderPath)) {
+                            // jump directly to that ancestor folder node:
+                            currentNode = folderMap.get(folderPath);
+                        } else {
+                            // create a new folder node:
+                            currentNode = createFolderTreeNode(subfolders[level], currentNode);
+                            folderMap.put(folderPath, currentNode);
+                            // all the folders, except for the top-level root node 
+                            // are collapsed by default:
+                            currentNode.setExpanded(expandFolders);
+
+                        }
+                        level++;
+                    }
+                    currentNode.getChildren().add(createFileTreeNode(fileMetadata, currentNode));
+                    // As soon as we reach the first folder containing files, we want
+                    // to have all the other folders collapsed by default:
+                    if (expandFolders) {
+                        expandFolders = false; 
+                    }
+                }
+            }
+        }
+        
+        folderMap = null; 
+
+    }
+    
+    private DefaultTreeNode createFolderTreeNode(String name, TreeNode parent) {
+        // For a tree node representing a folder, we use its name, as a String, 
+        // as the node data payload. (meaning, in the xhtml the folder name can
+        // be shown as simply "#{node}". 
+        // If we ever want to have more information shown for folders in the 
+        // tree view (for example, we could show the number of files and sub-folders
+        // in each folder next to the name), we will have to define a custom class 
+        // and use it instead of the string in the DefaultTreeNode constructor
+        // below:
+        DefaultTreeNode folderNode = new DefaultTreeNode(name, parent);
+        return folderNode; 
+    }
+    
+    private DefaultTreeNode createFileTreeNode(FileMetadata fileMetadata, TreeNode parent) {
+        // For a tree node representing a DataFile, we pack the entire FileMetadata 
+        // object into the node, as its "data" payload. 
+        // Note that we are using a custom node type ("customFileNode"), defined 
+        // in the page xhtml.
+        // If we ever want to have customized nodes that display different types 
+        // of information for different types of files (tab. files would be a 
+        // natural case), more custom nodes could be defined.
+        
+        DefaultTreeNode fileNode = new DefaultTreeNode("customFileNode", fileMetadata, parent);         
+        
+        return fileNode; 
     }
     
     public boolean isHasTabular() {
@@ -1825,7 +2025,7 @@ public class DatasetPage implements java.io.Serializable {
             dataset = datasetService.find(dataset.getId());
         }
         workingVersion = dataset.getEditVersion();
-
+        clone = workingVersion.cloneDatasetVersion();
         if (editMode == EditMode.INFO) {
             // ?
         } else if (editMode == EditMode.FILE) {
@@ -1834,10 +2034,10 @@ public class DatasetPage implements java.io.Serializable {
         } else if (editMode.equals(EditMode.METADATA)) {
             datasetVersionUI = datasetVersionUI.initDatasetVersionUI(workingVersion, true);
             updateDatasetFieldInputLevels();
-            JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("dataset.message.editMetadata"));
+            JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("dataset.message.editMetadata.label"), BundleUtil.getStringFromBundle("dataset.message.editMetadata.message"));
             //FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, "Edit Dataset Metadata", " - Add more metadata about your dataset to help others easily find it."));
         } else if (editMode.equals(EditMode.LICENSE)){
-            JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("dataset.message.editTerms"));
+            JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("dataset.message.editTerms.label"), BundleUtil.getStringFromBundle("dataset.message.editTerms.message"));
             //FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, "Edit Dataset License and Terms", " - Update your dataset's license and terms of use."));
         }
         this.readOnly = false;
@@ -1846,8 +2046,12 @@ public class DatasetPage implements java.io.Serializable {
     public String releaseDraft() {
         if (releaseRadio == 1) {
             return releaseDataset(true);
-        } else {
+        } else if(releaseRadio ==2) {
             return releaseDataset(false);
+        } else if(releaseRadio ==3) {
+            return updateCurrentVersion();
+        } else {
+            return "Invalid Choice";
         }
     }
 
@@ -1949,6 +2153,7 @@ public class DatasetPage implements java.io.Serializable {
             logger.severe(ex.getMessage());
             JH.addMessage(FacesMessage.SEVERITY_FATAL, BundleUtil.getStringFromBundle("dataset.message.deaccessionFailure"));
         }
+        setRenderDeaccessionPopup(false);
         JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("datasetVersion.message.deaccessionSuccess"));
         return returnToDatasetOnly();
     }
@@ -2031,6 +2236,7 @@ public class DatasetPage implements java.io.Serializable {
         return returnToDatasetOnly();
     }
 
+    @Deprecated
     public String registerDataset() {
         try {
             UpdateDatasetVersionCommand cmd = new UpdateDatasetVersionCommand(dataset, dvRequestService.getDataverseRequest());
@@ -2044,12 +2250,67 @@ public class DatasetPage implements java.io.Serializable {
         FacesContext.getCurrentInstance().addMessage(null, message);
         return returnToDatasetOnly();
     }
+    
+    public String updateCurrentVersion() {
+        /*
+         * Note: The code here mirrors that in the
+         * edu.harvard.iq.dataverse.api.Datasets:publishDataset method (case
+         * "updatecurrent"). Any changes to the core logic (i.e. beyond updating the
+         * messaging about results) should be applied to the code there as well.
+         */
+        String errorMsg = null;
+        String successMsg = BundleUtil.getStringFromBundle("datasetversion.update.success");
+        try {
+            CuratePublishedDatasetVersionCommand cmd = new CuratePublishedDatasetVersionCommand(dataset, dvRequestService.getDataverseRequest());
+            dataset = commandEngine.submit(cmd);
+            // If configured, and currently published version is archived, try to update archive copy as well
+            DatasetVersion updateVersion = dataset.getLatestVersion();
+            if (updateVersion.getArchivalCopyLocation() != null) {
+                String className = settingsService.get(SettingsServiceBean.Key.ArchiverClassName.toString());
+                AbstractSubmitToArchiveCommand archiveCommand = ArchiverUtil.createSubmitToArchiveCommand(className, dvRequestService.getDataverseRequest(), updateVersion);
+                if (archiveCommand != null) {
+                    // Delete the record of any existing copy since it is now out of date/incorrect
+                    updateVersion.setArchivalCopyLocation(null);
+                    /*
+                     * Then try to generate and submit an archival copy. Note that running this
+                     * command within the CuratePublishedDatasetVersionCommand was causing an error:
+                     * "The attribute [id] of class
+                     * [edu.harvard.iq.dataverse.DatasetFieldCompoundValue] is mapped to a primary
+                     * key column in the database. Updates are not allowed." To avoid that, and to
+                     * simplify reporting back to the GUI whether this optional step succeeded, I've
+                     * pulled this out as a separate submit().
+                     */
+                    try {
+                        updateVersion = commandEngine.submit(archiveCommand);
+                        if (updateVersion.getArchivalCopyLocation() != null) {
+                            successMsg = BundleUtil.getStringFromBundle("datasetversion.update.archive.success");
+                        } else {
+                            errorMsg = BundleUtil.getStringFromBundle("datasetversion.update.archive.failure");
+                        }
+                    } catch (CommandException ex) {
+                        errorMsg = BundleUtil.getStringFromBundle("datasetversion.update.archive.failure") + " - " + ex.toString();
+                        logger.severe(ex.getMessage());
+                    }
+                }
+            }
+        } catch (CommandException ex) {
+            errorMsg = BundleUtil.getStringFromBundle("datasetversion.update.failure") + " - " + ex.toString();
+            logger.severe(ex.getMessage());
+        }
+        if (errorMsg != null) {
+            JsfHelper.addErrorMessage(errorMsg);
+        } else {
+            JsfHelper.addSuccessMessage(successMsg);
+        }
+        return returnToDatasetOnly();
+    }
+
 
     public void refresh(ActionEvent e) {
         refresh();
     }
-    
-    public void refresh() {
+        
+    public String refresh() {
         logger.fine("refreshing");
 
         //dataset = datasetService.find(dataset.getId());
@@ -2076,7 +2337,7 @@ public class DatasetPage implements java.io.Serializable {
             // should probably redirect to the 404 page, if we can't find 
             // this version anymore. 
             // -- L.A. 4.2.3 
-            return;
+            return "";
         }
         this.workingVersion = retrieveDatasetVersionResponse.getDatasetVersion();
 
@@ -2084,9 +2345,8 @@ public class DatasetPage implements java.io.Serializable {
             // TODO: 
             // same as the above
 
-            return;
+            return "";
         }
-
 
         if (dataset == null) {
             // this would be the case if we were retrieving the version by 
@@ -2094,23 +2354,34 @@ public class DatasetPage implements java.io.Serializable {
             this.dataset = this.workingVersion.getDataset();
         }
 
-        
-
         if (readOnly) {
             datafileService.findFileMetadataOptimizedExperimental(dataset);
-        } 
-        fileMetadatasSearch = workingVersion.getFileMetadatasSorted();
+        }
 
+        fileMetadatasSearch = workingVersion.getFileMetadatasSorted();
         displayCitation = dataset.getCitation(true, workingVersion);
         stateChanged = false;
+
+        if (lockedDueToIngestVar != null && lockedDueToIngestVar) {
+            //we need to add a redirect here to disply the explore buttons as needed
+            //as well as the ingest success message
+            lockedDueToIngestVar = null;
+            return "/dataset.xhtml?persistentId=" + dataset.getGlobalIdString() + "&showIngestSuccess=true&faces-redirect=true";
+        }
+
+        return "";
     }
     
     public String deleteDataset() {
 
         DestroyDatasetCommand cmd;
+        boolean deleteCommandSuccess = false;
+        Map<Long,String> deleteStorageLocations = datafileService.getPhysicalFilesToDelete(dataset); 
+        
         try {
             cmd = new DestroyDatasetCommand(dataset, dvRequestService.getDataverseRequest());
             commandEngine.submit(cmd);
+            deleteCommandSuccess = true;
             /* - need to figure out what to do 
              Update notification in Delete Dataset Method
              for (UserNotification und : userNotificationService.findByDvObject(dataset.getId())){
@@ -2120,7 +2391,12 @@ public class DatasetPage implements java.io.Serializable {
             JH.addMessage(FacesMessage.SEVERITY_FATAL, BundleUtil.getStringFromBundle("dataset.message.deleteFailure"));
             logger.severe(ex.getMessage());
         }
+        
+        if (deleteCommandSuccess) {
+            datafileService.finalizeFileDeletes(deleteStorageLocations);
             JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("dataset.message.deleteSuccess"));
+        }
+        
         return "/dataverse.xhtml?alias=" + dataset.getOwner().getAlias() + "&faces-redirect=true";
     }
     
@@ -2345,21 +2621,16 @@ public class DatasetPage implements java.io.Serializable {
     }
     
         
-    public void saveLinkingDataverses() {
+    public void saveLinkingDataverses(ActionEvent evt) {
 
-        if (selectedDataverseForLinking == null) {
-            FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR, "", BundleUtil.getStringFromBundle("dataverse.link.select"));
-            FacesContext.getCurrentInstance().addMessage(null, message);
-            return;
-        }     
-
-        if(saveLink(selectedDataverseForLinking)){
+        if (saveLink(selectedDataverseForLinking)) {
             JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("dataset.message.linkSuccess", getSuccessMessageArguments()));
-        } else{           
+        } else {
             FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("dataset.notlinked"), linkingDataverseErrorMessage);
             FacesContext.getCurrentInstance().addMessage(null, message);
         }
-    } 
+
+    }
     
     private String linkingDataverseErrorMessage = "";
 
@@ -2581,6 +2852,9 @@ public class DatasetPage implements java.io.Serializable {
                         if (fmd.getDataFile().equals(dataset.getThumbnailFile())) {
                             dataset.setThumbnailFile(null);
                         }
+                        /* It should not be possible to get here if this file 
+                           is not in fact released! - so the code block below 
+                           is not needed.
                         //if not published then delete identifier
                         if (!fmd.getDataFile().isReleased()){
                             try{
@@ -2589,7 +2863,7 @@ public class DatasetPage implements java.io.Serializable {
                                  //this command is here to delete the identifier of unreleased files
                                  //if it fails then a reserved identifier may still be present on the remote provider
                             }                           
-                        }
+                        } */
                         fmit.remove();
                         break;
                     }
@@ -2631,7 +2905,59 @@ public class DatasetPage implements java.io.Serializable {
         return save();
     }
 
-    public String save() {
+    public void validateDeaccessionReason(FacesContext context, UIComponent toValidate, Object value) {
+
+        UIInput reasonRadio = (UIInput) toValidate.getAttributes().get("reasonRadio");
+        Object reasonRadioValue = reasonRadio.getValue();
+        Integer radioVal = new Integer(reasonRadioValue.toString());
+
+        if (radioVal == 7 && (value == null || value.toString().isEmpty())) {
+            ((UIInput) toValidate).setValid(false);
+            FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR, "", BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.textForReason.error"));
+            context.addMessage(toValidate.getClientId(context), message);
+
+        } else {
+            if (value == null || value.toString().length() <= DatasetVersion.VERSION_NOTE_MAX_LENGTH) {
+                ((UIInput) toValidate).setValid(true);
+            } else {
+                ((UIInput) toValidate).setValid(false);
+                Integer lenghtInt = DatasetVersion.VERSION_NOTE_MAX_LENGTH;
+              String lengthString =   lenghtInt.toString();
+               String userMsg = BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.limitChar.error", Arrays.asList(lengthString));
+                FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR, "", userMsg);
+                context.addMessage(toValidate.getClientId(context), message);
+            }
+        }
+    }
+
+    public void validateForwardURL(FacesContext context, UIComponent toValidate, Object value) {
+
+        if ((value == null || value.toString().isEmpty())) {
+            ((UIInput) toValidate).setValid(true);
+            return;
+        }
+
+        String testVal = value.toString();
+
+        if (!URLValidator.isURLValid(testVal)) {
+            ((UIInput) toValidate).setValid(false);
+            FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR, BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.url.error"), BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.url.error"));
+            context.addMessage(toValidate.getClientId(context), message);
+            return;
+        }
+        
+        if (value.toString().length() <= DatasetVersion.ARCHIVE_NOTE_MAX_LENGTH) {
+            ((UIInput) toValidate).setValid(true);
+        } else {
+            ((UIInput) toValidate).setValid(false);
+            FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR, BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.url.error"), BundleUtil.getStringFromBundle("file.deaccessionDialog.dialog.url.error"));
+            context.addMessage(toValidate.getClientId(context), message);
+
+        }
+
+    }
+     
+     public String save() {
          //Before dataset saved, write cached prov freeform to version
         if(systemConfig.isProvCollectionEnabled()) {
             provPopupFragmentBean.saveStageProvFreeformToLatestVersion();
@@ -2654,7 +2980,9 @@ public class DatasetPage implements java.io.Serializable {
         
         // Use the Create or Update command to save the dataset: 
         Command<Dataset> cmd;
-        try {
+        Map<Long, String> deleteStorageLocations = null;
+        
+        try { 
             if (editMode == EditMode.CREATE) {                
                 if ( selectedTemplate != null ) {
                     if ( isSessionUserAuthenticated() ) {
@@ -2668,7 +2996,10 @@ public class DatasetPage implements java.io.Serializable {
                 }
                 
             } else {
-                cmd = new UpdateDatasetVersionCommand(dataset, dvRequestService.getDataverseRequest(), filesToBeDeleted);
+                if (!filesToBeDeleted.isEmpty()) {
+                    deleteStorageLocations = datafileService.getPhysicalFilesToDelete(filesToBeDeleted);
+                }
+                cmd = new UpdateDatasetVersionCommand(dataset, dvRequestService.getDataverseRequest(), filesToBeDeleted, clone );
                 ((UpdateDatasetVersionCommand) cmd).setValidateLenient(true);  
             }
             dataset = commandEngine.submit(cmd);
@@ -2696,6 +3027,16 @@ public class DatasetPage implements java.io.Serializable {
             logger.log(Level.SEVERE, "CommandException, when attempting to update the dataset: " + ex.getMessage(), ex);
             populateDatasetUpdateFailureMessage();
             return returnToDraftVersion();
+        }
+        
+        // Have we just deleted some draft datafiles (successfully)? 
+        // finalize the physical file deletes:
+        // (DataFileService will double-check that the datafiles no 
+        // longer exist in the database, before attempting to delete 
+        // the physical files)
+        
+        if (deleteStorageLocations != null) {
+            datafileService.finalizeFileDeletes(deleteStorageLocations);
         }
         
         if (editMode != null) {
@@ -3003,6 +3344,7 @@ public class DatasetPage implements java.io.Serializable {
     private Boolean lockedFromEditsVar;
     private Boolean lockedFromDownloadVar;    
     private boolean lockedDueToDcmUpload;
+    private Boolean lockedDueToIngestVar;
     /**
      * Authors are not allowed to edit but curators are allowed - when Dataset is inReview
      * For all other locks edit should be locked for all editors.
@@ -3018,6 +3360,17 @@ public class DatasetPage implements java.io.Serializable {
         }
         return lockedFromEditsVar;
     }
+    
+    /**
+    Need to save ingest lock state to display success later.
+     */
+    public boolean isLockedDueToIngest() {
+        if(null == lockedDueToIngestVar || stateChanged) {
+               lockedDueToIngestVar = isLockedForIngest();
+        }
+        return lockedFromEditsVar;
+    }
+    
     
     // TODO: investigate why this method was needed in the first place?
     // It appears that it was written under the assumption that downloads 
@@ -4404,7 +4757,8 @@ public class DatasetPage implements java.io.Serializable {
                 return jsonLd;
             } else {
                 logger.fine("No cached schema.org JSON-LD available. Going to the database.");
-                return workingVersion.getJsonLd();
+                String jsonLdProduced = workingVersion.getJsonLd(); 
+                return  jsonLdProduced != null ? jsonLdProduced : "";
             }
         }
         return "";
@@ -4417,7 +4771,7 @@ public class DatasetPage implements java.io.Serializable {
 
     public void clearSelection() {
         logger.info("clearSelection called");
-        selectedFiles = Collections.EMPTY_LIST;
+        selectedFiles = Collections.emptyList();
     }
     
     public void fileListingPaginatorListener(PageEvent event) {       
@@ -4430,4 +4784,43 @@ public class DatasetPage implements java.io.Serializable {
         setFilePaginatorPage(dt.getPage());      
         setRowsPerPage(dt.getRowsToRender());
     }  
+    
+    /**
+     * This method can be called from *.xhtml files to allow archiving of a dataset
+     * version from the user interface. It is not currently (11/18) used in the IQSS/develop
+     * branch, but is used by QDR and is kept here in anticipation of including a
+     * GUI option to archive (already published) versions after other dataset page
+     * changes have been completed.
+     * 
+     * @param id - the id of the datasetversion to archive. 
+     */
+    public void archiveVersion(Long id) {
+        if (session.getUser() instanceof AuthenticatedUser) {
+            AuthenticatedUser au = ((AuthenticatedUser) session.getUser());
+
+            DatasetVersion dv = datasetVersionService.retrieveDatasetVersionByVersionId(id).getDatasetVersion();
+            String className = settingsService.getValueForKey(SettingsServiceBean.Key.ArchiverClassName);
+            AbstractSubmitToArchiveCommand cmd = ArchiverUtil.createSubmitToArchiveCommand(className, dvRequestService.getDataverseRequest(), dv);
+            if (cmd != null) {
+                try {
+                    DatasetVersion version = commandEngine.submit(cmd);
+                    logger.info("Archived to " + version.getArchivalCopyLocation());
+                    if (version.getArchivalCopyLocation() != null) {
+                        resetVersionTabList();
+                        this.setVersionTabListForPostLoad(getVersionTabList());
+                        JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("datasetversion.archive.success"));
+                    } else {
+                        JsfHelper.addErrorMessage(BundleUtil.getStringFromBundle("datasetversion.archive.failure"));
+                    }
+                } catch (CommandException ex) {
+                    logger.log(Level.SEVERE, "Unexpected Exception calling  submit archive command", ex);
+                    JsfHelper.addErrorMessage(BundleUtil.getStringFromBundle("datasetversion.archive.failure"));
+                }
+            } else {
+                logger.log(Level.SEVERE, "Could not find Archiver class: " + className);
+                JsfHelper.addErrorMessage(BundleUtil.getStringFromBundle("datasetversion.archive.failure"));
+
+            }
+        }
+    }
 }

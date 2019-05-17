@@ -156,7 +156,7 @@ public class DataverseUserPage implements java.io.Serializable {
                 
             } else {
                  // in create mode for new user
-                JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("user.signup.tip"));
+                JH.addMessage(FacesMessage.SEVERITY_INFO, BundleUtil.getStringFromBundle("user.message.signup.label"), BundleUtil.getStringFromBundle("user.message.signup.tip"));
                 userDisplayInfo = new AuthenticatedUserDisplayInfo();
                 return "";
             }
@@ -505,6 +505,10 @@ public class DataverseUserPage implements java.io.Serializable {
 
                 case CHECKSUMIMPORT:
                     userNotification.setTheObject(datasetVersionService.find(userNotification.getObjectId()));
+                    break;
+
+                case APIGENERATED:
+                    userNotification.setTheObject(userNotification.getUser());
                     break;
             }
 

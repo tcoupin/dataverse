@@ -2,6 +2,9 @@ nb-configuration.xml
 target
 infer-out
 nbactions.xml
+.settings
+.classpath
+.project
 michael-local
 GPATH
 GTAGS
@@ -53,3 +56,4 @@ org.eclipse*
 # do not track IntelliJ IDEA files
 .idea
 **/*.iml
+/bin/
