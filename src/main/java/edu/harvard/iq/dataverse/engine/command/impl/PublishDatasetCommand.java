@@ -41,21 +41,15 @@ public class PublishDatasetCommand extends AbstractPublishDatasetCommand<Publish
      */
     final boolean datasetExternallyReleased;
 
-    final boolean isPidPrePublished;
     
     public PublishDatasetCommand(Dataset datasetIn, DataverseRequest aRequest, boolean minor) {
-        this( datasetIn, aRequest, minor, false, false );
-    }
-    
-    public PublishDatasetCommand(Dataset datasetIn, DataverseRequest aRequest, boolean minor, boolean datasetExternallyReleased) {
-        this( datasetIn, aRequest, minor, datasetExternallyReleased, false );
+        this( datasetIn, aRequest, minor, false );
     }
 
-    public PublishDatasetCommand(Dataset datasetIn, DataverseRequest aRequest, boolean minor, boolean datasetExternallyReleased, boolean isPidPrePublished) {
+    public PublishDatasetCommand(Dataset datasetIn, DataverseRequest aRequest, boolean minor, boolean isPidPrePublished) {
         super(datasetIn, aRequest);
         minorRelease = minor;
-        this.datasetExternallyReleased = datasetExternallyReleased;
-        this.isPidPrePublished = isPidPrePublished || datasetExternallyReleased;
+        this.datasetExternallyReleased = isPidPrePublished;
         request = aRequest;
     }
 
@@ -127,12 +121,12 @@ public class PublishDatasetCommand extends AbstractPublishDatasetCommand<Publish
                 lock.setDataset(theDataset);
                 lock.setInfo(info);
                 ctxt.datasets().addDatasetLock(theDataset, lock);
-                ctxt.datasets().callFinalizePublishCommandAsynchronously(theDataset.getId(), ctxt, request, isPidPrePublished);
+                ctxt.datasets().callFinalizePublishCommandAsynchronously(theDataset.getId(), ctxt, request, datasetExternallyReleased);
                 return new PublishDatasetResult(theDataset, false);
                 
             } else {
                 // Synchronous publishing (no workflow involved)
-                theDataset = ctxt.engine().submit(new FinalizeDatasetPublicationCommand(theDataset, getRequest(),isPidPrePublished));
+                theDataset = ctxt.engine().submit(new FinalizeDatasetPublicationCommand(theDataset, getRequest(),datasetExternallyReleased));
                 return new PublishDatasetResult(theDataset, true);
             }
         }

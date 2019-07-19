@@ -44,14 +44,14 @@ public class FinalizeDatasetPublicationCommand extends AbstractPublishDatasetCom
     /**
      * mirror field from {@link PublishDatasetCommand} of same name
      */
-    final boolean isPidPrePublished;
+    final boolean datasetExternallyReleased;
     
     public FinalizeDatasetPublicationCommand(Dataset aDataset, DataverseRequest aRequest) {
         this( aDataset, aRequest, false );
     }
     public FinalizeDatasetPublicationCommand(Dataset aDataset, DataverseRequest aRequest, boolean isPidPrePublished) {
         super(aDataset, aRequest);
-        this.isPidPrePublished = isPidPrePublished;
+        this.datasetExternallyReleased = isPidPrePublished;
     }
 
     @Override
@@ -102,7 +102,7 @@ public class FinalizeDatasetPublicationCommand extends AbstractPublishDatasetCom
         ctxt.em().merge(ddu);
         
         updateParentDataversesSubjectsField(theDataset, ctxt);
-	if (!isPidPrePublished){
+	if (!datasetExternallyReleased){
 		publicizeExternalIdentifier(theDataset, ctxt);
 	}
 
@@ -113,7 +113,7 @@ public class FinalizeDatasetPublicationCommand extends AbstractPublishDatasetCom
         
 	if ( theDataset.getLatestVersion().getVersionState() != RELEASED ) {
 		// some imported datasets may already be released.
-		if (!isPidPrePublished){
+		if (!datasetExternallyReleased){
 			publicizeExternalIdentifier(theDataset, ctxt);
 		}
 		theDataset.getLatestVersion().setVersionState(RELEASED);
@@ -136,7 +136,7 @@ public class FinalizeDatasetPublicationCommand extends AbstractPublishDatasetCom
         
         ctxt.workflows().getDefaultWorkflow(TriggerType.PostPublishDataset).ifPresent(wf -> {
             try {
-                ctxt.workflows().start(wf, buildContext(ds, TriggerType.PostPublishDataset, isPidPrePublished));
+                ctxt.workflows().start(wf, buildContext(ds, TriggerType.PostPublishDataset, datasetExternallyReleased));
             } catch (CommandException ex) {
                 logger.log(Level.SEVERE, "Error invoking post-publish workflow: " + ex.getMessage(), ex);
             }
@@ -191,6 +191,9 @@ public class FinalizeDatasetPublicationCommand extends AbstractPublishDatasetCom
     }
 
     private void publicizeExternalIdentifier(Dataset dataset, CommandContext ctxt) throws CommandException {
+        if ( !dataset.getGlobalId().authorityEquals( ctxt.settings().getValueForKey(SettingsServiceBean.Key.Authority, "")) ){
+            return;
+        }
         String protocol = getDataset().getProtocol();
         GlobalIdServiceBean idServiceBean = GlobalIdServiceBean.getBean(protocol, ctxt);
         if (idServiceBean != null) {

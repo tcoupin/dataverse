@@ -2211,7 +2211,7 @@ public class DatasetPage implements java.io.Serializable {
         if (session.getUser() instanceof AuthenticatedUser) {
             try {
                 final PublishDatasetResult result = commandEngine.submit(
-                    new PublishDatasetCommand(dataset, dvRequestService.getDataverseRequest(), minor, false, !dataset.isIdentifierRegistered())
+                    new PublishDatasetCommand(dataset, dvRequestService.getDataverseRequest(), minor)
                 );
                 dataset = result.getDataset();
                 // Sucessfully executing PublishDatasetCommand does not guarantee that the dataset 

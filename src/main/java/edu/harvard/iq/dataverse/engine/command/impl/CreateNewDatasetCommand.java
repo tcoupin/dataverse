@@ -13,6 +13,7 @@ import edu.harvard.iq.dataverse.engine.command.exception.IllegalCommandException
 import static edu.harvard.iq.dataverse.util.StringUtil.nonEmpty;
 import java.util.logging.Logger;
 import edu.harvard.iq.dataverse.GlobalIdServiceBean;
+import edu.harvard.iq.dataverse.settings.SettingsServiceBean;
 
 /**
  * Creates a new {@link Dataset}, used to store unpublished data. This is as opposed to 
@@ -26,7 +27,6 @@ public class CreateNewDatasetCommand extends AbstractCreateDatasetCommand {
     private static final Logger logger = Logger.getLogger(CreateNewDatasetCommand.class.getName());
     
     private final Template template;
-    private boolean providedIdentifier = false;
 
     public CreateNewDatasetCommand(Dataset theDataset, DataverseRequest aRequest) {
         this( theDataset, aRequest, false); 
@@ -39,7 +39,6 @@ public class CreateNewDatasetCommand extends AbstractCreateDatasetCommand {
     public CreateNewDatasetCommand(Dataset theDataset, DataverseRequest aRequest, boolean registrationRequired, Template template) {
         super(theDataset, aRequest, registrationRequired);
         this.template = template;
-        this.providedIdentifier = nonEmpty(getDataset().getIdentifier()) && getDataset().getGlobalIdCreateTime() != null;
     }
     
     /**
@@ -49,7 +48,7 @@ public class CreateNewDatasetCommand extends AbstractCreateDatasetCommand {
      */
     @Override
     protected void additionalParameterTests(CommandContext ctxt) throws CommandException {
-        if ( nonEmpty(getDataset().getIdentifier()) && getDataset().getGlobalIdCreateTime() == null ) {
+        if ( nonEmpty(getDataset().getIdentifier()) && getDataset().getGlobalId().authorityEquals( ctxt.settings().getValueForKey(SettingsServiceBean.Key.Authority, "")) ) {
             GlobalIdServiceBean idServiceBean = GlobalIdServiceBean.getBean(getDataset().getProtocol(), ctxt);
             if ( ctxt.datasets().isIdentifierUnique(getDataset().getIdentifier(), getDataset(), idServiceBean) ) {
                 throw new IllegalCommandException(String.format("Dataset with identifier '%s', protocol '%s' and authority '%s' already exists",
@@ -66,9 +65,6 @@ public class CreateNewDatasetCommand extends AbstractCreateDatasetCommand {
 
     @Override
     protected void handlePid(Dataset theDataset, CommandContext ctxt) throws CommandException {
-        if (providedIdentifier) {
-            return;
-        }
         GlobalIdServiceBean idServiceBean = GlobalIdServiceBean.getBean(ctxt);
         if ( !idServiceBean.registerWhenPublished() ) {
             // pre-register a persistent id

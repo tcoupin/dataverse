@@ -95,6 +95,11 @@ public class GlobalId implements java.io.Serializable {
         this.authority = authority;
     }
 
+    public boolean authorityEquals(String extAuth){
+        logger.log(Level.FINE, "Compare authority: local[{0}] ext[{1}]", new Object[]{authority, extAuth});
+        return !isEmpty(authority) && authority.equals(extAuth);
+    }
+
     public String getIdentifier() {
         return identifier;
     }

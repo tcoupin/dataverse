@@ -23,7 +23,7 @@ import static java.util.stream.Collectors.joining;
 import javax.validation.ConstraintViolation;
 import edu.harvard.iq.dataverse.GlobalIdServiceBean;
 import edu.harvard.iq.dataverse.pidproviders.FakePidProviderServiceBean;
-
+import edu.harvard.iq.dataverse.settings.SettingsServiceBean;
 /**
  *
  * Base class for commands that deal with {@code Dataset}s.Mainly here as a code
@@ -156,7 +156,7 @@ public abstract class AbstractDatasetCommand<T> extends AbstractCommand<T> {
      * @throws CommandException
      */
     protected void registerExternalIdentifier(Dataset theDataset, CommandContext ctxt) throws CommandException {
-        if (!theDataset.isIdentifierRegistered()) {
+        if (!theDataset.isIdentifierRegistered() && !theDataset.getGlobalId().authorityEquals( ctxt.settings().getValueForKey(SettingsServiceBean.Key.Authority, "")) ) {
             GlobalIdServiceBean globalIdServiceBean = GlobalIdServiceBean.getBean(theDataset.getProtocol(), ctxt);
             if ( globalIdServiceBean != null ) {
                 if (globalIdServiceBean instanceof FakePidProviderServiceBean) {
