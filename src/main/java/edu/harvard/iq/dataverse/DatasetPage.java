@@ -7,8 +7,10 @@ import edu.harvard.iq.dataverse.api.AbstractApiBean;
 import edu.harvard.iq.dataverse.authorization.AuthenticationServiceBean;
 import edu.harvard.iq.dataverse.authorization.Permission;
 import edu.harvard.iq.dataverse.authorization.providers.builtin.BuiltinUserServiceBean;
+import edu.harvard.iq.dataverse.authorization.users.ApiToken;
 import edu.harvard.iq.dataverse.authorization.users.AuthenticatedUser;
 import edu.harvard.iq.dataverse.authorization.users.PrivateUrlUser;
+import edu.harvard.iq.dataverse.authorization.users.User;
 import edu.harvard.iq.dataverse.branding.BrandingUtil;
 import edu.harvard.iq.dataverse.dataaccess.StorageIO;
 import edu.harvard.iq.dataverse.dataaccess.ImageThumbConverter;
@@ -100,6 +102,7 @@ import edu.harvard.iq.dataverse.engine.command.impl.SubmitDatasetForReviewComman
 import edu.harvard.iq.dataverse.externaltools.ExternalTool;
 import edu.harvard.iq.dataverse.externaltools.ExternalToolServiceBean;
 import edu.harvard.iq.dataverse.export.SchemaDotOrgExporter;
+import edu.harvard.iq.dataverse.externaltools.ExternalToolHandler;
 import edu.harvard.iq.dataverse.makedatacount.MakeDataCountLoggingServiceBean;
 import edu.harvard.iq.dataverse.makedatacount.MakeDataCountLoggingServiceBean.MakeDataCountEntry;
 import java.util.Collections;
@@ -136,6 +139,7 @@ import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
+import org.primefaces.PrimeFaces;
 import org.primefaces.model.DefaultTreeNode;
 import org.primefaces.model.TreeNode;
 
@@ -314,10 +318,15 @@ public class DatasetPage implements java.io.Serializable {
         this.showIngestSuccess = showIngestSuccess;
     }
         
+    // TODO: Consider renaming "configureTools" to "fileConfigureTools".
     List<ExternalTool> configureTools = new ArrayList<>();
+    // TODO: Consider renaming "exploreTools" to "fileExploreTools".
     List<ExternalTool> exploreTools = new ArrayList<>();
+    // TODO: Consider renaming "configureToolsByFileId" to "fileConfigureToolsByFileId".
     Map<Long, List<ExternalTool>> configureToolsByFileId = new HashMap<>();
+    // TODO: Consider renaming "exploreToolsByFileId" to "fileExploreToolsByFileId".
     Map<Long, List<ExternalTool>> exploreToolsByFileId = new HashMap<>();
+    private List<ExternalTool> datasetExploreTools;
     
     public Boolean isHasRsyncScript() {
         return hasRsyncScript;
@@ -2088,8 +2097,9 @@ public class DatasetPage implements java.io.Serializable {
             JsfHelper.addSuccessMessage(BundleUtil.getStringFromBundle("dataset.unlocked.ingest.message"));
         }
         
-        configureTools = externalToolService.findByType(ExternalTool.Type.CONFIGURE);
-        exploreTools = externalToolService.findByType(ExternalTool.Type.EXPLORE);
+        configureTools = externalToolService.findFileToolsByType(ExternalTool.Type.CONFIGURE);
+        exploreTools = externalToolService.findFileToolsByType(ExternalTool.Type.EXPLORE);
+        datasetExploreTools = externalToolService.findDatasetToolsByType(ExternalTool.Type.EXPLORE);
         rowsPerPage = 10;
       
         
@@ -3556,7 +3566,7 @@ public class DatasetPage implements java.io.Serializable {
     private String returnToDatasetOnly(){
          dataset = datasetService.find(dataset.getId());
          editMode = null;         
-         return "/dataset.xhtml?persistentId=" + dataset.getGlobalIdString()  +  "&faces-redirect=true";       
+         return "/dataset.xhtml?persistentId=" + dataset.getGlobalId().asString() +  "&faces-redirect=true";    
     }
     
     private String returnToDraftVersion(){      
@@ -5132,6 +5142,10 @@ public class DatasetPage implements java.io.Serializable {
         return cachedTools;
     }
 
+    public List<ExternalTool> getDatasetExploreTools() {
+        return datasetExploreTools;
+    }
+
     Boolean thisLatestReleasedVersion = null;
     
     public boolean isThisLatestReleasedVersion() {
@@ -5280,4 +5294,17 @@ public class DatasetPage implements java.io.Serializable {
             return type1.compareTo(type2);
         }
     };
+
+    public void explore(ExternalTool externalTool) {
+        ApiToken apiToken = null;
+        User user = session.getUser();
+        if (user instanceof AuthenticatedUser) {
+            apiToken = authService.findApiTokenByUser((AuthenticatedUser) user);
+        }
+        ExternalToolHandler externalToolHandler = new ExternalToolHandler(externalTool, dataset, apiToken, session.getLocaleCode());
+        String toolUrl = externalToolHandler.getToolUrlWithQueryParams();
+        logger.fine("Exploring with " + toolUrl);
+        PrimeFaces.current().executeScript("window.open('"+toolUrl + "', target='_blank');");
+    }
+
 }
