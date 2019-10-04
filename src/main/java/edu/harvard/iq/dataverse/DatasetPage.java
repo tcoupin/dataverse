@@ -1451,47 +1451,18 @@ public class DatasetPage implements java.io.Serializable {
              *   - doi:10.XXX/YYY
              *   - http://doi.org/10.XXX/YYY
              *   - https://doi.org/10.XXX/YYY
+             *   - XDAQSDQSD/10.XXX/Y
              */
 
-            //// From ImportGenericServiceBean.java l.395 
-            int index1 = providedDOI.indexOf(':');
-            int index2 = providedDOI.indexOf('/');
-            if (index1==-1) {
-                providedDOI = GlobalId.DOI_PROTOCOL + ":" + providedDOI;
-                index1 = providedDOI.indexOf(':');
-                index2 = providedDOI.indexOf('/');
-            }  
-       
-            String protocol = providedDOI.substring(0, index1);
-        
-            if (GlobalId.DOI_PROTOCOL.equals(protocol)) {
-                logger.fine("Processing doi:-style identifier : "+providedDOI);        
+            int index1 = providedDOI.indexOf("10.");
+            int index2 = providedDOI.indexOf('/', index1 + 1);
 
-            } else if ("http".equalsIgnoreCase(protocol) || "https".equalsIgnoreCase(protocol)) {
-            
-                // We also recognize global identifiers formatted as global resolver URLs:
-            
-                if (providedDOI.startsWith(GlobalId.DOI_RESOLVER_URL)) {
-                    logger.fine("Processing DOI identifier formatted as a resolver URL: "+providedDOI);
-                    protocol = GlobalId.DOI_PROTOCOL;
-                    index1 = GlobalId.DOI_RESOLVER_URL.length() - 1; 
-                    index2 = providedDOI.indexOf("/", index1 + 1);
-                } else {
-                    logger.warning("HTTP Url in supplied as the identifier is neither a Handle nor DOI resolver: "+providedDOI);
-                    return;
-                }
-            
-            } else {
-                logger.warning("Unknown identifier format: "+providedDOI);
-                return; 
-            }
-        
-            if (index2 == -1) {
-                logger.warning("Error parsing identifier: " + providedDOI + ". Second '/' not found in string");
+            if (index1 == -1 || index2 == -1) {
+                logger.warning("Error parsing identifier: " + providedDOI + ".");
                 return;
             }
 
-            String authority = providedDOI.substring(index1 + 1, index2);
+            String authority = providedDOI.substring(index1, index2);
             String identifier = providedDOI.substring(index2 + 1);
 
             dataset.setProtocol(GlobalId.DOI_PROTOCOL);
