@@ -1462,8 +1462,8 @@ public class DatasetPage implements java.io.Serializable {
                 return;
             }
 
-            String authority = providedDOI.substring(index1, index2);
-            String identifier = providedDOI.substring(index2 + 1);
+            String authority = providedDOI.substring(index1, index2).trim().replaceAll("\\s","_");
+            String identifier = providedDOI.substring(index2 + 1).trim().replaceAll("\\s","_");
 
             dataset.setProtocol(GlobalId.DOI_PROTOCOL);
             dataset.setAuthority(authority);
