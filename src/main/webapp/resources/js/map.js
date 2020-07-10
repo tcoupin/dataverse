@@ -80,7 +80,7 @@ function DvMapBBoxSouth(val) {
 
 // Create map if needed, and add registered layers
 function DvMapInit() {
-    if ($("script.dvmap").parent().parent().parent().find("div.dvmap").length != 0) {
+    if ($("script.dvmap").parent().parent().parent().parent().parent().find("div.dvmap").length != 0) {
         return
     }
     DvMapStorage.initProcess++
@@ -93,7 +93,7 @@ function DvMapInit() {
     var map_div = document.createElement('div');
     map_div.className = "dvmap"
     map_div.style.minHeight = "250px";
-    $("script.dvmap").parent().parent().parent().append(map_div)
+    $("script.dvmap").parent().parent().parent().parent().parent().append(map_div)
 
     // Create map and base layers
     DvMapStorage.map = L.map(map_div).setView([0, 0], 0);
@@ -112,7 +112,7 @@ function DvMapInit() {
         DvMapStorage.map.fitBounds(DvMapStorage.layer.getBounds(), { maxZoom: 3 })
     })
 
-    $("script.dvmap").parent().parent().parent().parent().on('shown.bs.collapse',function(){
+    $("script.dvmap").parent().parent().parent().parent().parent().parent().on('shown.bs.collapse',function(){
         DvMapStorage.map.invalidateSize()
         DvMapStorage.map.fitBounds(DvMapStorage.layer.getBounds(), { maxZoom: 3 })
     })
@@ -168,10 +168,10 @@ function DvMapOpenPopup(btn){
     DvMapStorage.lastBtnPressed = btn;
     var bbox="";
     if (btn !== undefined){
-        var west = $(btn).parent().find('div:has(label[for="metadata_westLongitude"])').find('input').val();
-        var east = $(btn).parent().find('div:has(label[for="metadata_eastLongitude"])').find('input').val();
-        var north = $(btn).parent().find('div:has(label[for="metadata_northLongitude"])').find('input').val(); // yes, longitude... to be coherent with geospatial.tsv
-        var south = $(btn).parent().find('div:has(label[for="metadata_southLongitude"])').find('input').val();// yes, longitude... to be coherent with geospatial.tsv
+        var west = $(btn).parent().find('div#metadata_geographicBoundingBox_westLongitude').find('input').val();
+        var east = $(btn).parent().find('div#metadata_geographicBoundingBox_eastLongitude').find('input').val();
+        var north = $(btn).parent().find('div#metadata_geographicBoundingBox_northLongitude').find('input').val(); // yes, longitude... to be coherent with geospatial.tsv
+        var south = $(btn).parent().find('div#metadata_geographicBoundingBox_southLongitude').find('input').val();// yes, longitude... to be coherent with geospatial.tsv
         if (west != '' && east != '' && north != '' && south != ''){
             bbox=`?bbox=${south};${west};${north};${east}`
         }
@@ -185,10 +185,10 @@ function DvMapPopupCallback(bbox){
     if (DvMapStorage.lastBtnPressed === undefined){
         return
     }
-    $(DvMapStorage.lastBtnPressed).parent().find('div:has(label[for="metadata_westLongitude"])').find('input').val(bbox.west);
-    $(DvMapStorage.lastBtnPressed).parent().find('div:has(label[for="metadata_eastLongitude"])').find('input').val(bbox.east);
-    $(DvMapStorage.lastBtnPressed).parent().find('div:has(label[for="metadata_northLongitude"])').find('input').val(bbox.north);// yes, longitude... to be coherent with geospatial.tsv
-    $(DvMapStorage.lastBtnPressed).parent().find('div:has(label[for="metadata_southLongitude"])').find('input').val(bbox.south);// yes, longitude... to be coherent with geospatial.tsv
+    $(DvMapStorage.lastBtnPressed).parent().find('div#metadata_geographicBoundingBox_westLongitude').find('input').val(bbox.west);
+    $(DvMapStorage.lastBtnPressed).parent().find('div#metadata_geographicBoundingBox_eastLongitude').find('input').val(bbox.east);
+    $(DvMapStorage.lastBtnPressed).parent().find('div#metadata_geographicBoundingBox_northLongitude').find('input').val(bbox.north);// yes, longitude... to be coherent with geospatial.tsv
+    $(DvMapStorage.lastBtnPressed).parent().find('div#metadata_geographicBoundingBox_southLongitude').find('input').val(bbox.south);// yes, longitude... to be coherent with geospatial.tsv
 }
 
 var GetAsync = function (url, callback) {

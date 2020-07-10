@@ -8,13 +8,17 @@
  DC_SUFFIX=".dc"
 
  $("form#datasetForm").on('change', function(e){
-     var inputs = $('div:has(>label[for="metadata_publicationIDNumber"])').find('input')
+     var inputs = $('div#metadata_publication_publicationIDNumber').find('input')
+
+     var type = $(e.target).parent().parent().find('div#metadata_publication_publicationIDType').find('select option:selected').text();
     
      if (inputs.toArray().indexOf(e.target)>=0){
          var inputStr = $(e.target).val().trim().toLocaleLowerCase()
          if (inputStr.indexOf('fdi:')==0){
              completeFDI(inputStr, e.target)
          } else if (inputStr.indexOf('doi:')==0 || inputStr.indexOf('http://doi.org')==0 || inputStr.indexOf('https://doi.org')==0){
+            completeDOI(inputStr, e.target)
+        } else if (type == "doi" && inputStr.indexOf('10.')==0 ) {
             completeDOI(inputStr, e.target)
         }
      }
@@ -35,14 +39,19 @@ var pendingHorizon;
                 return
             }
         
-            var url = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationURL"])').find('input')
-            var citation = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationCitation"])').find('textarea')
-            var type = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationIDType"])').find('select')
+            var url = $(elem).parent().parent().find('div#metadata_publication_publicationURL').find('input')
+            var citation = $(elem).parent().parent().find('div#metadata_publication_publicationCitation').find('textarea')
+            var type = $(elem).parent().parent().find('div#metadata_publication_publicationIDType').find('select')
+            var type_label = $(elem).parent().parent().find('div#metadata_publication_publicationIDType').find('label');
+            var id = $(elem).parent().parent().find('div#metadata_publication_publicationIDNumber').find('input')
 
+            console.log(type)
             
             $(type).find('option').filter(function(){return $(this).text() == 'url'}).first().prop('selected',true)
+            $(type_label).empty().append("url");
             $(url).val(HORIZON_URL_DISPLAY+fdi)
             $(citation).val(ids[0].textContent)
+            $(id).val(fdi)
             
         }
     }
@@ -64,7 +73,21 @@ var pendingHorizon;
     doi = doi.replace('doi:','');
     doi = doi.replace('http://doi.org/','');
     doi = doi.replace('https://doi.org/','');
-    var url = "https://data.datacite.org/text/x-bibliography;style=harvard-cite-them-right/"+doi
+    var url = "https://citation.crosscite.org/format?style=harvard-cite-them-right&lang=fr-FR&doi="+encodeURIComponent("https://doi.org/"+doi)
+
+    var url_field = $(element).parent().parent().find('div#metadata_publication_publicationURL').find('input')
+    var type = $(element).parent().parent().find('div#metadata_publication_publicationIDType').find('select')
+    var type_label = $(element).parent().parent().find('div#metadata_publication_publicationIDType').find('label');
+    var id = $(element).parent().parent().find('div#metadata_publication_publicationIDNumber').find('input');
+    var citation = $(element).parent().parent().find('div#metadata_publication_publicationCitation').find('textarea')
+
+    $(url_field).val("https://doi.org/"+doi)
+    $(type).find('option').filter(function(){return $(this).text() == 'doi'}).first().prop('selected',true)
+    $(type_label).empty().append("doi");
+    $(id).val(doi)
+    $(citation).val("...")
+
+
     if (pendingDOI != undefined){
         pendingDOI.abort()
     }
@@ -72,16 +95,9 @@ var pendingHorizon;
         return function(data){
             var elem = input_element
             
-            var url = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationURL"])').find('input')
-            var citation = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationCitation"])').find('textarea')
-            var type = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationIDType"])').find('select')
-            var id = $(elem).parent().parent().parent().find('div:has(>label[for="metadata_publicationIDNumber"])').find('input')
-
-            
-            $(type).find('option').filter(function(){return $(this).text() == 'doi'}).first().prop('selected',true)
-            $(url).val("https://doi.org/"+doi)
+            var citation = $(elem).parent().parent().find('div#metadata_publication_publicationCitation').find('textarea')
             $(citation).val(data)
-            $(id).val(doi)
+
         }
     }
     function onError(){
@@ -95,3 +111,5 @@ var pendingHorizon;
         error: onError
     })
  }
+
+ console.log("Horizon/Doi plugin loaded")
